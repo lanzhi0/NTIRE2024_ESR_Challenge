@@ -1,2 +1,7 @@
-Model               	Val PSNR  	Test PSNR 	Val Time [ms] 	Test Time [ms]	Ave Time [ms] 	Params [M]	FLOPs [G] 	Acts [M]	Mem [M] 	Conv    
-00_RLFN_baseline    	26.96     	27.07     	14.94         	9.49          	12.21         	0.317     	19.67     	80.05   	467.70  	  39    
+Max Memory : 594.806 [M]
+ ------> Average runtime of (valid) is : 23.278991 milliseconds
+ ------> Average PSNR of (valid) is : 26.990561 dB
+#Activations : 80.0452 [M]
+#Conv2d : 39
+FLOPs : 19.7000 [G]
+#Params : 0.3176 [M]
