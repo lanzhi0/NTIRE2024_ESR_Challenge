@@ -24,26 +24,34 @@ def select_model(args, device):
         # Ckpts: rlfn_ntire_x4.pth
         from models.team00_RLFN import RLFN_Prune
         name, data_range = f"{model_id:02}_RLFN_baseline", 255.0
-        # model_path = os.path.join('model_zoo', 'team00_rlfn.pth')
-        model_path = os.path.join('NTIRE2024_ESR/model_zoo', 'team13_rlfn.pth')
-        # model_path = os.path.join('NTIRE2024_ESR/model_zoo', 'EDSR_x4.pt')
-
+        model_path = os.path.join('model_zoo', 'team13_model1.pth')
         model = RLFN_Prune()
         model.load_state_dict(torch.load(model_path), strict=True)
 
-    # elif model_id == 1:
-    #     from models.team[Your_Team_ID]_[Model_Name] import [Model_Name]
-    #     ...
+    elif model_id == 1:
+        from models.team13_RLFN_B import RLFN_B
+        from models.team00_RLFN import RLFN_Prune
+        name, data_range = f"{model_id:02}_RLFN_baseline", 255.0
+        model_path1 = os.path.join('model_zoo', 'team13_model1.pth')
+        model_path2 = os.path.join('model_zoo', 'team13_model2.pth')
+        model1 = RLFN_Prune()
+        model1.load_state_dict(torch.load(model_path1), strict=True)
+        model2 = RLFN_B()
+        model2.load_state_dict(torch.load(model_path2), strict=True)
     else:
         raise NotImplementedError(f"Model {model_id} is not implemented.")
 
     # print(model)
-    model.eval()
+    model1.eval()
+    model2.eval()
     tile = None
-    for k, v in model.named_parameters():
+    for k, v in model1.named_parameters():
         v.requires_grad = False
-    model = model.to(device)
-    return model, name, data_range, tile
+    model1 = model1.to(device)
+    for k, v in model2.named_parameters():
+        v.requires_grad = False
+    model2 = model2.to(device)
+    return model1, model2, name, data_range, tile
 
 
 def select_dataset(data_dir, mode):
@@ -100,7 +108,7 @@ def forward(img_lq, model, tile=None, tile_overlap=32, scale=4):
     return output
 
 
-def run(model, model_name, data_range, tile, logger, device, args, mode="test"):
+def run(model1, model2,model_name, data_range, tile, logger, device, args, mode="test"):
 
     sf = 4
     border = sf
@@ -135,8 +143,10 @@ def run(model, model_name, data_range, tile, logger, device, args, mode="test"):
         # --------------------------------
         # (2) img_sr
         # --------------------------------
+        img_sr1 = forward(img_lr, model1, tile)
         start.record()
-        img_sr = forward(img_lr, model, tile)
+        img_sr2= forward(img_lr, model2, tile)
+        img_sr = (0.60 * img_sr1 + 0.40 * img_sr2)
         end.record()
         torch.cuda.synchronize()
         results[f"{mode}_runtime"].append(start.elapsed_time(end))  # milliseconds
@@ -211,7 +221,7 @@ def main(args):
     # --------------------------------
     # load model
     # --------------------------------
-    model, model_name, data_range, tile = select_model(args, device)
+    model1, model2, model_name, data_range, tile = select_model(args, device)
     logger.info(model_name)
 
     # if model not in results:
@@ -220,18 +230,18 @@ def main(args):
         # restore image
         # --------------------------------
 
-        # inference on both the DIV2K and LSDIR validate sets
-        valid_results = run(model, model_name, data_range, tile, logger, device, args, mode="valid")
+        # # inference on both the DIV2K and LSDIR validate sets
+        valid_results = run(model1, model2,model_name, data_range, tile, logger, device, args, mode="valid")
         # record PSNR, runtime
         results[model_name] = valid_results
 
         # inference conducted by the organizer
         if args.include_test:
-            test_results = run(model, model_name, data_range, tile, logger, device, args, mode="test")
+            test_results = run(model1,model2, model_name, data_range, tile, logger, device, args, mode="test")
             results[model_name].update(test_results)
 
         input_dim = (3, 256, 256)  # set the input dimension
-        activations, num_conv = get_model_activation(model, input_dim)
+        activations, num_conv = get_model_activation(model2, input_dim)
         activations = activations/10**6
         logger.info("{:>16s} : {:<.4f} [M]".format("#Activations", activations))
         logger.info("{:>16s} : {:<d}".format("#Conv2d", num_conv))
@@ -243,11 +253,11 @@ def main(args):
 
         # fvcore is used in NTIRE2024_ESR for FLOPs calculation
         input_fake = torch.rand(1, 3, 256, 256).to(device)
-        flops = FlopCountAnalysis(model, input_fake).total()
+        flops = FlopCountAnalysis(model2, input_fake).total()
         flops = flops/10**9
         logger.info("{:>16s} : {:<.4f} [G]".format("FLOPs", flops))
 
-        num_parameters = sum(map(lambda x: x.numel(), model.parameters()))
+        num_parameters = sum(map(lambda x: x.numel(), model2.parameters()))
         num_parameters = num_parameters/10**6
         logger.info("{:>16s} : {:<.4f} [M]".format("#Params", num_parameters))
         results[model_name].update({"activations": activations, "num_conv": num_conv, "flops": flops, "num_parameters": num_parameters})

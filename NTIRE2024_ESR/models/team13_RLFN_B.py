@@ -50,6 +50,8 @@ def activation(act_type, inplace=True, neg_slope=0.05, n_prelu=1):
         layer = nn.LeakyReLU(neg_slope, inplace)
     elif act_type == 'prelu':
         layer = nn.PReLU(num_parameters=n_prelu, init=neg_slope)
+    elif act_type == 'gelu':
+        layer = nn.GELU()
     else:
         raise NotImplementedError(
             'activation layer [{:s}] is not found'.format(act_type))
@@ -128,7 +130,7 @@ class ESA(nn.Module):
         return x * m
 
 
-class RLFB(nn.Module):
+class RLFB_B(nn.Module):
     """
     Residual Local Feature Block (RLFB).
     """
@@ -138,7 +140,7 @@ class RLFB(nn.Module):
                  mid_channels=None,
                  out_channels=None,
                  esa_channels=16):
-        super(RLFB, self).__init__()
+        super(RLFB_B, self).__init__()
 
         if mid_channels is None:
             mid_channels = in_channels
@@ -146,6 +148,7 @@ class RLFB(nn.Module):
             out_channels = in_channels
 
         self.c1_r = conv_layer(in_channels, mid_channels, 3)
+        self.bn1 = nn.BatchNorm2d(mid_channels)
         self.c2_r = conv_layer(mid_channels, mid_channels, 3)
         self.c3_r = conv_layer(mid_channels, in_channels, 3)
 
@@ -153,9 +156,11 @@ class RLFB(nn.Module):
         self.esa = ESA(esa_channels, out_channels, nn.Conv2d)
 
         self.act = activation('lrelu', neg_slope=0.05)
+        # self.act = activation('gelu')
 
     def forward(self, x):
         out = (self.c1_r(x))
+        out = self.bn1(out)
         out = self.act(out)
 
         out = (self.c2_r(out))
@@ -170,7 +175,7 @@ class RLFB(nn.Module):
         return out
 
 
-class RLFN_Prune(nn.Module):
+class RLFN_B(nn.Module):
     """
     Residual Local Feature Network (RLFN)
     Model definition of RLFN in NTIRE 2022 Efficient SR Challenge
@@ -182,16 +187,16 @@ class RLFN_Prune(nn.Module):
                  feature_channels=46,
                  mid_channels=48,
                  upscale=4):
-        super(RLFN_Prune, self).__init__()
+        super(RLFN_B, self).__init__()
 
         self.conv_1 = conv_layer(in_channels,
                                        feature_channels,
                                        kernel_size=3)
 
-        self.block_1 = RLFB(feature_channels, mid_channels)
-        self.block_2 = RLFB(feature_channels, mid_channels)
-        self.block_3 = RLFB(feature_channels, mid_channels)
-        self.block_4 = RLFB(feature_channels, mid_channels)
+        self.block_1 = RLFB_B(feature_channels, mid_channels)
+        self.block_2 = RLFB_B(feature_channels, mid_channels)
+        self.block_3 = RLFB_B(feature_channels, mid_channels)
+        self.block_4 = RLFB_B(feature_channels, mid_channels)
 
         self.conv_2 = conv_layer(feature_channels,
                                        feature_channels,
