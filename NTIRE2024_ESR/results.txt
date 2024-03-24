@@ -1,6 +1,7 @@
 Max Memory : 594.806 [M]
  ------> Average runtime of (valid) is : 23.278991 milliseconds
  ------> Average PSNR of (valid) is : 26.990561 dB
+ ------> Average PSNR of (test) is : 27.09 dB
 #Activations : 80.0452 [M]
 #Conv2d : 39
 FLOPs : 19.7000 [G]
